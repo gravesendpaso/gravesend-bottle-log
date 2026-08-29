@@ -258,6 +258,9 @@
 // Paste your deployed Apps Script web app URL here (Deploy > New deployment > Web app).
 // Until this is set, the app runs on the built-in wine list only, with nothing saved.
 const API_URL = 'https://script.google.com/a/macros/gravesendpaso.com/s/AKfycbzR_QtDsGS0ZhWTzuU1Oi70JVtBgysr5W5BXnG01wCJ2ltncWjLxd-_1MuVp66Hho8YoA/exec';
+// Must match APP_KEY in BottleLogBackend.gs — this page's source is public,
+// so this key only keeps out casual/automated requests, not a determined look at the code.
+const APP_KEY = 'kSPVE_0CDprL-sxtd9HBTa5a';
 
 const CATEGORY_META = {
   bubbles: {label:'Bubbles', color:'var(--cat-bubbles)'},
@@ -447,7 +450,7 @@ function jsonp(params){
 // Both reads and writes go through a <script> tag (JSONP), not fetch() —
 // Apps Script web apps don't reliably send the CORS headers fetch() requires.
 async function apiGet(){
-  return jsonp({ action: 'all' });
+  return jsonp({ action: 'all', key: APP_KEY });
 }
 async function apiPost(action, payload){
   const flat = {};
@@ -455,7 +458,7 @@ async function apiPost(action, payload){
     const v = payload[k];
     flat[k] = Array.isArray(v) ? v.join(',') : v;
   });
-  return jsonp(Object.assign({ action }, flat));
+  return jsonp(Object.assign({ action, key: APP_KEY }, flat));
 }
 
 async function loadState(){
@@ -467,6 +470,12 @@ async function loadState(){
   }
   try{
     const data = await apiGet();
+    if(data.error){
+      showToast('Sheet said: ' + data.error);
+      state.roster = DEFAULT_ROSTER;
+      render();
+      return;
+    }
     state.roster = (data.roster && data.roster.length) ? data.roster.map(normalizeWine) : DEFAULT_ROSTER;
     state.entries = (data.entries || []).map(normalizeEntry);
     if(data.catalog && data.catalog.length){ FULL_CATALOG = data.catalog.map(normalizeWine); }
