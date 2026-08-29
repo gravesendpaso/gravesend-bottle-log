@@ -1,0 +1,828 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Gravesend — Bottle Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* near-neutral graphite base, one confident saturated amber as the through-line accent */
+    --bg: #17140f;
+    --surface: #201b15;
+    --surface-2: #2a231b;
+    --line: #3a3227;
+    --text: #f5f1e8;
+    --text-dim: #a89a86;
+    --burgundy: #b23a4e;
+    --burgundy-bright: #cc4d63;
+    --gold: #e0a339;
+    --gold-bright: #f0b95a;
+    --green: #7fc274;
+    --amber: #e0a339;
+    --alert-red: #d1573f;
+    --cat-bubbles: #f0c565;
+    --cat-rose: #ec8fa0;
+    --cat-white: #f3e3ad;
+    --cat-chilled: #e07d45;
+    --cat-red: #8a1f34;
+    --cat-dessert: #b8863f;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    padding-bottom: 48px;
+  }
+  .wrap{ max-width: 560px; margin: 0 auto; padding: 0 16px; }
+
+  header{
+    padding: 26px 16px 16px;
+    border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 20;
+    background: linear-gradient(180deg, var(--bg) 84%, transparent);
+  }
+  header .eyebrow{
+    font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--gold-bright); font-weight: 600; margin-bottom: 5px;
+  }
+  header h1{
+    font-family: 'Courier Prime', monospace; font-weight: 700; font-size: 25px;
+    margin: 0; letter-spacing: -.01em;
+  }
+  header p{ margin: 6px 0 0; color: var(--text-dim); font-size: 13px; line-height: 1.45; }
+
+  .tabs{ display:flex; gap: 6px; margin: 14px 0 0; }
+  .tab{
+    flex: 1; text-align:center; padding: 9px 8px; border-radius: 9px;
+    font-size: 13px; font-weight: 600; color: var(--text-dim);
+    background: var(--surface); border: 1px solid var(--line);
+    cursor: pointer; user-select: none;
+  }
+  .tab.active{ color: var(--bg); background: var(--gold-bright); border-color: var(--gold-bright); }
+
+  section{ padding: 16px 0 6px; }
+  .section-title{
+    font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--text-dim); font-weight: 600; margin: 0 0 4px;
+    display:flex; align-items:center; justify-content: space-between;
+  }
+  .section-title .count{ color: var(--gold-bright); }
+  .hint{ font-size: 12px; color: var(--text-dim); margin: 0 0 12px; line-height: 1.4; }
+
+  input[type=text]{
+    width: 100%; background: var(--surface); border: 1px solid var(--line);
+    color: var(--text); padding: 12px 14px; border-radius: 10px; font-size: 15px;
+    font-family: inherit;
+  }
+  input[type=text]::placeholder{ color: var(--text-dim); }
+  input[type=text]:focus{ outline: none; border-color: var(--gold); }
+
+  .cat-filter{ display:flex; gap: 7px; overflow-x: auto; margin: 10px 0 4px; padding-bottom: 2px; }
+  .cat-filter::-webkit-scrollbar{ display:none; }
+  .cat-pill{
+    display:flex; align-items:center; gap: 6px; flex-shrink: 0;
+    padding: 7px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+    background: var(--surface); border: 1px solid var(--line); color: var(--text-dim);
+    cursor: pointer; white-space: nowrap;
+  }
+  .cat-pill.active{ background: var(--surface-2); border-color: var(--text-dim); color: var(--text); }
+  .cat-dot{ width: 9px; height: 9px; border-radius: 50%; flex-shrink:0; }
+
+  .wine-row{
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    margin-bottom: 8px; overflow: hidden; border-left-width: 4px; border-left-style: solid;
+  }
+  .wine-row .head{
+    display:flex; align-items:center; justify-content: space-between;
+    padding: 13px 14px; cursor: pointer; gap: 10px;
+  }
+  .wine-row .name{ font-size: 14.5px; font-weight: 600; line-height: 1.3; }
+  .wine-row .meta{ font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+  .wine-row .reserve-tag{
+    display:inline-block; font-size: 10px; letter-spacing:.06em; text-transform:uppercase;
+    color: var(--gold-bright); border: 1px solid var(--gold-bright); border-radius: 5px;
+    padding: 1px 6px; margin-left: 6px; vertical-align: 1px;
+  }
+  .wine-row .notbtg-tag{
+    display:inline-block; font-size: 10px; letter-spacing:.04em;
+    color: var(--text-dim); border: 1px solid var(--line); border-radius: 5px;
+    padding: 1px 6px; margin-left: 6px; vertical-align: 1px;
+  }
+  .wine-row.extra{ border-left-style: dashed; opacity: .88; }
+  .chev{ color: var(--text-dim); font-size: 18px; transition: transform .18s; flex-shrink:0; }
+  .wine-row.open .chev{ transform: rotate(90deg); }
+
+  .panel{
+    max-height: 0; overflow: hidden; transition: max-height .22s ease;
+    border-top: 1px solid var(--line);
+  }
+  .wine-row.open .panel{ max-height: 260px; }
+  .panel-inner{ padding: 14px; }
+  .who-row{ display:flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .chip{
+    padding: 7px 13px; border-radius: 999px; font-size: 13px; font-weight: 600;
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--text-dim);
+    cursor: pointer;
+  }
+  .chip.selected{ background: var(--gold); color: var(--bg); border-color: var(--gold); }
+  .action-row{ display:flex; gap: 8px; }
+  .btn{
+    flex:1; padding: 12px 10px; border-radius: 10px; border: none; font-weight: 700;
+    font-size: 14px; cursor: pointer; font-family: inherit;
+  }
+  .btn:disabled{ opacity: .4; cursor: not-allowed; }
+  .btn-cv{ background: var(--burgundy); color: #f3e4e9; }
+  .btn-cv:not(:disabled):active{ background: var(--burgundy-bright); }
+  .btn-open{ background: var(--gold); color: var(--bg); }
+  .btn-open:not(:disabled):active{ background: var(--gold-bright); }
+
+  .add-row{
+    display:flex; align-items:center; justify-content:center; gap: 6px;
+    padding: 13px; border: 1px dashed var(--line); border-radius: 12px;
+    color: var(--text-dim); font-size: 13.5px; font-weight: 600; cursor: pointer;
+    margin-top: 6px;
+  }
+
+  .active-card{
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 13px 14px; margin-bottom: 8px; display:flex; align-items:center; gap: 12px;
+    border-left-width: 4px; border-left-style: solid;
+  }
+  .dot{ width: 9px; height: 9px; border-radius: 50%; flex-shrink:0; }
+  .dot.green{ background: var(--green); } .dot.amber{ background: var(--amber); } .dot.red{ background: var(--alert-red); }
+  .active-card .info{ flex:1; min-width:0; }
+  .active-card .name{ font-size: 14px; font-weight: 600; }
+  .active-card .sub{ font-size: 12px; color: var(--text-dim); margin-top: 1px; }
+  .close-btn{
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
+    padding: 8px 12px; border-radius: 8px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .log-entry{ padding: 10px 0; border-bottom: 1px solid var(--line); display:flex; justify-content: space-between; gap: 10px; }
+  .log-entry:last-child{ border-bottom: none; }
+  .log-entry .left .name{ font-size: 13.5px; font-weight: 600; }
+  .log-entry .left .sub{ font-size: 12px; color: var(--text-dim); margin-top: 1px; }
+  .log-entry .badge{ font-size: 10.5px; font-weight: 700; letter-spacing: .04em; padding: 3px 8px; border-radius: 6px; height: fit-content; }
+  .badge.cv{ background: rgba(178,58,78,.32); color: #f3b8c3; }
+  .badge.o{ background: rgba(224,163,57,.26); color: var(--gold-bright); }
+  .badge.closed{ background: var(--surface-2); color: var(--text-dim); }
+
+  .empty{ color: var(--text-dim); font-size: 13.5px; text-align:center; padding: 24px 10px; }
+
+  .footer-bar{
+    position: sticky; bottom: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(0deg, var(--bg) 75%, transparent);
+    display:flex; gap: 8px;
+  }
+  .footer-bar button{
+    flex:1; padding: 13px; border-radius: 11px; font-weight: 700; font-size: 14px;
+    border: 1px solid var(--line); background: var(--surface); color: var(--text); cursor:pointer;
+    font-family: inherit;
+  }
+  .footer-bar button.primary{ background: var(--gold); color: var(--bg); border-color: var(--gold); }
+
+  .toast{
+    position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%) translateY(20px);
+    background: var(--surface-2); border: 1px solid var(--gold); color: var(--text);
+    padding: 10px 18px; border-radius: 10px; font-size: 13.5px; font-weight: 600;
+    opacity: 0; pointer-events: none; transition: all .25s ease; z-index: 50;
+  }
+  .toast.show{ opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .add-form{ display:flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+  .add-form input, .add-form select{ font-size: 14px; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line); color: var(--text); font-family: inherit; }
+  .add-form .row{ display:flex; gap: 8px; }
+  .add-form .row input:first-child{ flex: 1.3; }
+  .add-form .row input:last-child{ flex: .7; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Gravesend Wine Merchant</div>
+    <h1>Bottle Log</h1>
+    <p>Log a Coravin pour or a full open — either way the bottle comes off bottle stock and into BTG rotation. List matches the Aug 26 menu.</p>
+    <div class="tabs">
+      <div class="tab active" data-tab="log">Log a bottle</div>
+      <div class="tab" data-tab="active">Open now <span id="active-count-tab"></span></div>
+      <div class="tab" data-tab="history">History</div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div id="view-log" class="view">
+      <section>
+        <input type="text" id="search" placeholder="Search wine or producer…" autocomplete="off" />
+        <div class="cat-filter" id="cat-filter"></div>
+      </section>
+      <section style="padding-top:4px">
+        <div id="wine-list"></div>
+        <div class="add-row" id="add-wine-trigger">+ Add a wine not on this list</div>
+        <div id="add-form-holder"></div>
+      </section>
+    </div>
+
+    <div id="view-active" class="view" style="display:none">
+      <section>
+        <div class="section-title">Coravin'd — still on the shelf <span class="count" id="active-count"></span></div>
+        <p class="hint">Pulled from bottle stock, pouring by the glass. Close one out once it's fully finished.</p>
+        <div id="active-list"></div>
+      </section>
+    </div>
+
+    <div id="view-history" class="view" style="display:none">
+      <section>
+        <div class="section-title">Recent activity</div>
+        <div id="history-list"></div>
+      </section>
+    </div>
+  </div>
+
+  <div class="footer-bar">
+    <button id="copy-btn">Reconcile &amp; copy</button>
+    <button id="manage-btn" class="primary">Manage list</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// Paste your deployed Apps Script web app URL here (Deploy > New deployment > Web app).
+// Until this is set, the app runs on the built-in wine list only, with nothing saved.
+const API_URL = 'https://script.google.com/a/macros/gravesendpaso.com/s/AKfycbzR_QtDsGS0ZhWTzuU1Oi70JVtBgysr5W5BXnG01wCJ2ltncWjLxd-_1MuVp66Hho8YoA/exec';
+
+const CATEGORY_META = {
+  bubbles: {label:'Bubbles', color:'var(--cat-bubbles)'},
+  rose:    {label:'Rosé', color:'var(--cat-rose)'},
+  white:   {label:'White', color:'var(--cat-white)'},
+  chilled: {label:'Chilled Red', color:'var(--cat-chilled)'},
+  red:     {label:'Red', color:'var(--cat-red)'},
+  dessert: {label:'Dessert', color:'var(--cat-dessert)'},
+};
+const CATEGORY_ORDER = ['bubbles','rose','white','chilled','red','dessert'];
+
+const DEFAULT_ROSTER = [
+  {id:'mbonnamy-cremant', producer:'M. Bonnamy', year:'NV', wine:'Crémant de Loire Brut', category:'bubbles'},
+  {id:'mbonnamy-cremant-rose', producer:'M. Bonnamy', year:'NV', wine:'Crémant de Loire Brut Rosé', category:'bubbles'},
+  {id:'sorgente-prosecco', producer:'Sorgente', year:'NV', wine:'Prosecco Brut', category:'bubbles'},
+  {id:'labatt-lambrusco-25', producer:'La Battagliola', year:'2025', wine:'Lambrusco Grasparossa Brut', category:'bubbles'},
+  {id:'glasrose-verjus-25', producer:'Glasrose', year:'2025', wine:'Hibiscus & Blood Orange Verjus (Zero Proof)', category:'bubbles'},
+  {id:'primapave-bdb', producer:'Prima Pavé', year:'NV', wine:'Blanc de Blancs (Zero Proof)', category:'bubbles'},
+
+  {id:'decemil-rosebydubeau-25', producer:'Decemil', year:'2025', wine:'Rosé by Du Beau', category:'rose'},
+  {id:'rr-shirleybird-25', producer:'Resting Roots', year:'2025', wine:'Shirley Bird Rosé', category:'rose'},
+  {id:'mcv-pink-25', producer:'MCV', year:'2025', wine:'Pink', category:'rose'},
+  {id:'saintk-atw-25', producer:'Saint K', year:'2025', wine:'Around The Way', category:'rose'},
+  {id:'jacobtoft-josephines-25', producer:'Jacob Toft', year:'2025', wine:"Josephine's Rosé", category:'rose'},
+  {id:'ciento-miamor-25', producer:'Ciento', year:'2025', wine:'Mi Amor', category:'rose'},
+
+  {id:'cairjn-assyrtiko-25', producer:'Cairjn', year:'2025', wine:'Assyrtiko', category:'white'},
+  {id:'rococo-chenin-25', producer:'Rococo', year:'2025', wine:'Own Rooted Chenin Blanc', category:'white'},
+  {id:'mcv-white-25', producer:'MCV', year:'2025', wine:'White', category:'white'},
+  {id:'saintk-flowerbomb-23', producer:'Saint K', year:'2023', wine:'Flower Bomb', category:'white'},
+  {id:'cc-picpoul-25', producer:'Clementine Carter', year:'2025', wine:'Picpoul Blanc', category:'white'},
+  {id:'akana-viognier-25', producer:'Akana', year:'2025', wine:'Viognier', category:'white'},
+  {id:'bushong-scq-25', producer:'Bushong', year:'2025', wine:'Spanish Castle Queen', category:'white'},
+  {id:'idola-alariviera-24', producer:'Ídola', year:'2024', wine:'a la riviera', category:'white'},
+  {id:'saintk-nrlya-22', producer:'Saint K', year:'2022', wine:'Never Really Loved You Anyway', category:'white'},
+
+  {id:'rr-jester-25', producer:'Resting Roots', year:'2025', wine:'The Jester (carbonic)', category:'chilled'},
+
+  {id:'saintk-gravesend-23', producer:'Saint K', year:'2023', wine:'Gravesend', category:'red'},
+  {id:'piro-pointswest-21', producer:'Piro', year:'2021', wine:'Points West', category:'red'},
+  {id:'pgc-milo-23', producer:'Press Gang Cellars', year:'2023', wine:'Cuvee Milo', category:'red'},
+  {id:'saintk-daysgoneby-22', producer:'Saint K', year:'2022', wine:'Days Gone By', category:'red'},
+  {id:'ruakh-findless-23', producer:'Rúakh', year:'2023', wine:'Find Less', category:'red'},
+  {id:'saxum-4hearts-23', producer:'Saxum', year:'2023', wine:'4Hearts', category:'red', reserve:true},
+
+  {id:'bushong-sweetillusions', producer:'Bushong', year:'NV', wine:'Sweet Illusions', category:'dessert'},
+];
+
+let FULL_CATALOG = [
+  {id: "bushong-faire-la-f-te-2024", producer: "Bushong", year: "2024", wine: "Faire la Fête", category: "bubbles"},
+  {id: "caliza-end-of-the-day-blanc-de-blanc-2022", producer: "Caliza", year: "2022", wine: "End of The Day Blanc de Blanc", category: "bubbles"},
+  {id: "jm-seleque-extra-brut-champagne-solessen-nv", producer: "JM Seleque", year: "NV", wine: "Extra Brut Champagne Solessence", category: "bubbles"},
+  {id: "la-battagliola-lambrusco-grasparossa-bru-2025", producer: "La Battagliola", year: "2025", wine: "Lambrusco Grasparossa Brut", category: "bubbles"},
+  {id: "m-bonnamy-cr-mant-de-loire-brut-nv", producer: "M. Bonnamy", year: "NV", wine: "Crémant de Loire Brut", category: "bubbles"},
+  {id: "m-bonnamy-cr-mant-de-loire-brut-ros-nv", producer: "M. Bonnamy", year: "NV", wine: "Crémant de Loire Brut Rosé", category: "bubbles"},
+  {id: "rava-blanc-de-blanc-nv", producer: "Rava", year: "NV", wine: "Blanc de Blanc", category: "bubbles"},
+  {id: "sorgente-prosecco-brut-nv", producer: "Sorgente", year: "NV", wine: "Prosecco Brut", category: "bubbles"},
+  {id: "ciento-mi-amor-2025", producer: "Ciento", year: "2025", wine: "Mi Amor", category: "rose"},
+  {id: "decemil-ros-by-du-beau-2025", producer: "Decemil", year: "2025", wine: "Rosé by Du Beau", category: "rose"},
+  {id: "mcv-pink-2025", producer: "MCV", year: "2025", wine: "Pink", category: "rose"},
+  {id: "resting-roots-shirley-bird-ros-2025", producer: "Resting Roots", year: "2025", wine: "Shirley Bird Rosé", category: "rose"},
+  {id: "saint-k-around-the-way-2025", producer: "Saint K", year: "2025", wine: "Around The Way", category: "rose"},
+  {id: "glasrose-hibiscus-blood-orange-verjus-ze-2025", producer: "Glasrose", year: "2025", wine: "Hibiscus & Blood Orange Verjus (Zero Proof)", category: "rose"},
+  {id: "akana-viognier-2025", producer: "Akana", year: "2025", wine: "Viognier", category: "white"},
+  {id: "bushong-spanish-castle-queen-2025", producer: "Bushong", year: "2025", wine: "Spanish Castle Queen", category: "white"},
+  {id: "cairjn-assyrtiko-2025", producer: "Cairjn", year: "2025", wine: "Assyrtiko", category: "white"},
+  {id: "ciento-el-blanco-2025", producer: "Ciento", year: "2025", wine: "El Blanco", category: "white"},
+  {id: "creekcut-roussanne-2024", producer: "Creekcut", year: "2024", wine: "Roussanne", category: "white"},
+  {id: "dragonette-chardonnay-radian-vineyard-2023", producer: "Dragonette", year: "2023", wine: "Chardonnay (Radian Vineyard)", category: "white"},
+  {id: "hubba-verdelho-2022", producer: "Hubba", year: "2022", wine: "Verdelho", category: "white"},
+  {id: "dola-a-la-riviera-2024", producer: "Ídola", year: "2024", wine: "a la riviera", category: "white"},
+  {id: "levo-el-paso-de-robles-white-wine-2024", producer: "Levo", year: "2024", wine: "El Paso De Robles White Wine", category: "white"},
+  {id: "mcv-white-2025", producer: "MCV", year: "2025", wine: "White", category: "white"},
+  {id: "rococo-own-rooted-chenin-blanc-2025", producer: "Rococo", year: "2025", wine: "Own Rooted Chenin Blanc", category: "white"},
+  {id: "saint-k-flower-bomb-2023", producer: "Saint K", year: "2023", wine: "Flower Bomb", category: "white"},
+  {id: "saint-k-flower-bomb-2025", producer: "Saint K", year: "2025", wine: "Flower Bomb", category: "white"},
+  {id: "saint-k-never-really-loved-you-anyway-2022", producer: "Saint K", year: "2022", wine: "Never Really Loved You Anyway", category: "white"},
+  {id: "saint-k-she-doesn-t-like-diamonds-2020", producer: "Saint K", year: "2020", wine: "She Doesn't Like Diamonds", category: "white"},
+  {id: "saint-k-y-kai-chardonnay-2021", producer: "Saint K", year: "2021", wine: "Yōkai (Chardonnay)", category: "white"},
+  {id: "tercero-grenache-blanc-2017", producer: "Tercero", year: "2017", wine: "Grenache Blanc", category: "white"},
+  {id: "ulloa-cellars-gew-rztraminer-2024", producer: "Ulloa Cellars", year: "2024", wine: "Gewürztraminer", category: "white"},
+  {id: "zobeto-blanca-2025", producer: "Zobeto", year: "2025", wine: "Blanca", category: "white"},
+  {id: "ciento-cinsault-2025", producer: "Ciento", year: "2025", wine: "Cinsault", category: "chilled"},
+  {id: "resting-roots-the-jester-2025", producer: "Resting Roots", year: "2025", wine: "The Jester", category: "chilled"},
+  {id: "allbaer-escarp-grenache-2022", producer: "AllBaer", year: "2022", wine: "Escarpé (Grenache)", category: "red"},
+  {id: "allbaer-le-perle-grenache-2023", producer: "AllBaer", year: "2023", wine: "Le Perle (Grenache)", category: "red"},
+  {id: "allbaer-le-perle-sangiovese-cabernet-2023", producer: "AllBaer", year: "2023", wine: "Le Perle (Sangiovese, Cabernet)", category: "red"},
+  {id: "bushong-grace-2023", producer: "Bushong", year: "2023", wine: "Grace", category: "red"},
+  {id: "bushong-physical-sound-2023", producer: "Bushong", year: "2023", wine: "Physical Sound", category: "red"},
+  {id: "bushong-power-corruption-lies-2023", producer: "Bushong", year: "2023", wine: "Power Corruption & Lies", category: "red"},
+  {id: "bushong-unknown-pleasures-2023", producer: "Bushong", year: "2023", wine: "Unknown Pleasures", category: "red"},
+  {id: "bushong-sweet-illusions-nv", producer: "Bushong", year: "NV", wine: "Sweet Illusions", category: "dessert"},
+  {id: "cairjn-blend-no-4-2023", producer: "Cairjn", year: "2023", wine: "Blend No.4", category: "red"},
+  {id: "cairjn-grenache-2021", producer: "Cairjn", year: "2021", wine: "Grenache", category: "red"},
+  {id: "cairjn-syrah-2023", producer: "Cairjn", year: "2023", wine: "Syrah", category: "red"},
+  {id: "ciento-left-bank-2024", producer: "Ciento", year: "2024", wine: "Left Bank", category: "red"},
+  {id: "clementine-carter-mourv-dre-christy-wise-2023", producer: "Clementine Carter", year: "2023", wine: "Mourvèdre Christy & Wise", category: "red"},
+  {id: "clementine-carter-syrah-robert-rae-2023", producer: "Clementine Carter", year: "2023", wine: "Syrah Robert Rae", category: "red"},
+  {id: "creekcut-eight10-2023", producer: "Creekcut", year: "2023", wine: "Eight10", category: "red"},
+  {id: "creekcut-s-m-2022", producer: "Creekcut", year: "2022", wine: "S&M", category: "red"},
+  {id: "creekcut-syrah-de-saule-2022", producer: "Creekcut", year: "2022", wine: "Syrah de Saule", category: "red"},
+  {id: "creekcut-the-cut-2023", producer: "Creekcut", year: "2023", wine: "The Cut", category: "red"},
+  {id: "desperada-phoebe-2022", producer: "Desperada", year: "2022", wine: "Phoebe", category: "red"},
+  {id: "dragonette-pinot-noir-fiddlestix-vineyar-2023", producer: "Dragonette", year: "2023", wine: "Pinot Noir Fiddlestix Vineyard", category: "red"},
+  {id: "dragonette-syrah-stolpman-vineyard-2022", producer: "Dragonette", year: "2022", wine: "Syrah Stolpman Vineyard", category: "red"},
+  {id: "dreamc-te-syv-bdx-2021", producer: "DreamCôte", year: "2021", wine: "SYV BDX", category: "red"},
+  {id: "emercy-oh-boy-2021", producer: "Emercy", year: "2021", wine: "Oh Boy", category: "red"},
+  {id: "emercy-the-inbetween-days-2021", producer: "Emercy", year: "2021", wine: "The Inbetween Days", category: "red"},
+  {id: "end-of-the-day-cabernet-2022", producer: "End of The Day", year: "2022", wine: "Cabernet", category: "red"},
+  {id: "h2-family-wines-merlot-2020", producer: "H2 Family Wines", year: "2020", wine: "Merlot", category: "red"},
+  {id: "hood-red-blend-eba-2020", producer: "Hood", year: "2020", wine: "Red Blend EBA", category: "red"},
+  {id: "herman-story-first-time-caller-2023", producer: "Herman Story", year: "2023", wine: "First Time Caller", category: "red"},
+  {id: "jacob-toft-angela-s-cuv-e-2023", producer: "Jacob Toft", year: "2023", wine: "Angela's Cuvée", category: "red"},
+  {id: "jacob-toft-mary-jane-s-cuv-e-2023", producer: "Jacob Toft", year: "2023", wine: "Mary Jane's Cuvée", category: "red"},
+  {id: "kiler-canyon-estate-cuv-e-2021", producer: "Kiler Canyon", year: "2021", wine: "Estate Cuvée", category: "red"},
+  {id: "kiler-canyon-reserve-syrah-2021", producer: "Kiler Canyon", year: "2021", wine: "Reserve Syrah", category: "red"},
+  {id: "levo-two-of-a-kind-grenache-2023", producer: "Levo", year: "2023", wine: "Two of a Kind (Grenache)", category: "red"},
+  {id: "levo-two-of-a-kind-syrah-2023", producer: "Levo", year: "2023", wine: "Two of a Kind (Syrah)", category: "red"},
+  {id: "levo-warm-regards-2022", producer: "Levo", year: "2022", wine: "Warm Regards", category: "red"},
+  {id: "loom-sonder-2022", producer: "Loom", year: "2022", wine: "Sonder", category: "red"},
+  {id: "mcv-1105-2021", producer: "MCV", year: "2021", wine: "1105", category: "red"},
+  {id: "mcv-petite-sirah-gemeny-vineyard-2021", producer: "MCV", year: "2021", wine: "Petite Sirah (Gemeny Vineyard)", category: "red"},
+  {id: "nenow-family-wines-york-mountain-grenach-2022", producer: "Nenow Family Wines", year: "2022", wine: "York Mountain Grenache", category: "red"},
+  {id: "nicora-buxom-2022", producer: "Nicora", year: "2022", wine: "Buxom", category: "red"},
+  {id: "paix-sur-terre-been-away-too-long-2022", producer: "Paix Sur Terre", year: "2022", wine: "Been Away Too Long", category: "red"},
+  {id: "pec-burl-g2-vineyard-2020", producer: "Pec & Burl", year: "2020", wine: "G2 Vineyard", category: "red"},
+  {id: "piro-points-west-2021", producer: "Piro", year: "2021", wine: "Points West", category: "red"},
+  {id: "press-gang-cellars-cuvee-milo-2023", producer: "Press Gang Cellars", year: "2023", wine: "Cuvee Milo", category: "red"},
+  {id: "roar-pinot-noir-sierra-mar-2023", producer: "Roar", year: "2023", wine: "Pinot Noir (Sierra Mar)", category: "red"},
+  {id: "r-akh-find-less-2023", producer: "Rúakh", year: "2023", wine: "Find Less", category: "red"},
+  {id: "r-akh-conversations-with-strangers-2022", producer: "Rúakh", year: "2022", wine: "Conversations With Strangers", category: "red"},
+  {id: "saint-k-y-kai-pinot-noir-2021", producer: "Saint K", year: "2021", wine: "Yōkai Pinot Noir", category: "red"},
+  {id: "saint-k-black-cat-bone-2022", producer: "Saint K", year: "2022", wine: "Black Cat Bone", category: "red"},
+  {id: "saint-k-boomstick-2022", producer: "Saint K", year: "2022", wine: "Boomstick", category: "red"},
+  {id: "saint-k-days-gone-by-2022", producer: "Saint K", year: "2022", wine: "Days Gone By", category: "red"},
+  {id: "saint-k-days-gone-by-2023", producer: "Saint K", year: "2023", wine: "Days Gone By", category: "red"},
+  {id: "saint-k-everything-is-under-control-2021", producer: "Saint K", year: "2021", wine: "Everything Is Under Control", category: "red"},
+  {id: "saint-k-everything-is-under-control-2023", producer: "Saint K", year: "2023", wine: "Everything Is Under Control", category: "red"},
+  {id: "saint-k-gravesend-lagrein-2021", producer: "Saint K", year: "2021", wine: "Gravesend (Lagrein)", category: "red"},
+  {id: "saint-k-gravesend-carignan-2023", producer: "Saint K", year: "2023", wine: "Gravesend (Carignan)", category: "red"},
+  {id: "saint-k-like-the-snows-of-yesteryear-2023", producer: "Saint K", year: "2023", wine: "Like The Snows of Yesteryear", category: "red"},
+  {id: "terranean-grenache-2023", producer: "Terranean", year: "2023", wine: "Grenache", category: "red"},
+  {id: "terre-et-sang-leave-it-to-the-birds-2020", producer: "Terre et Sang", year: "2020", wine: "Leave It To The Birds", category: "red"},
+  {id: "terre-et-sang-sidecar-2021", producer: "Terre et Sang", year: "2021", wine: "Sidecar", category: "red"},
+  {id: "the-witch-the-warlock-essokinesis-2022", producer: "The Witch & The Warlock", year: "2022", wine: "Essokinesis", category: "red"},
+  {id: "turtle-rock-cabernet-sauvignon-2022", producer: "Turtle Rock", year: "2022", wine: "Cabernet Sauvignon", category: "red"},
+  {id: "ultima-tulie-petite-sirah-2020", producer: "Ultima Tulie", year: "2020", wine: "Petite Sirah", category: "red"},
+  {id: "willow-creek-wine-co-vernacular-2022", producer: "Willow Creek Wine Co.", year: "2022", wine: "Vernacular", category: "red"},
+  {id: "zobeto-dizziness-of-freedom-2023", producer: "Zobeto", year: "2023", wine: "Dizziness of Freedom", category: "red"},
+  {id: "saxum-4hearts-2023", producer: "Saxum", year: "2023", wine: "4Hearts", category: "red"}
+];
+
+const STAFF = ['Brittany','Celeste','Bailey','Keith','Matt','Jess','Other'];
+
+let state = { roster: DEFAULT_ROSTER, entries: [] };
+let openRowId = null;
+let selectedWho = {};
+let manageMode = false;
+let activeTab = 'log';
+let activeCategory = 'all';
+
+function normalizeWine(w){
+  return Object.assign({}, w, { reserve: w.reserve === true || w.reserve === 'TRUE' || w.reserve === 'true' });
+}
+function normalizeEntry(e){
+  return Object.assign({}, e, {
+    closedAt: e.closedAt ? e.closedAt : null,
+    reconciled: e.reconciled === true || e.reconciled === 'TRUE' || e.reconciled === 'true'
+  });
+}
+
+let jsonpCounter = 0;
+function jsonp(params){
+  return new Promise((resolve, reject) => {
+    const cbName = 'gbl_cb_' + (jsonpCounter++) + '_' + Date.now();
+    const script = document.createElement('script');
+    const timeout = setTimeout(() => { cleanup(); reject(new Error('timed out — check the API_URL and your connection')); }, 12000);
+    function cleanup(){ clearTimeout(timeout); delete window[cbName]; script.remove(); }
+    window[cbName] = (data) => { cleanup(); resolve(data); };
+    const qs = new URLSearchParams(Object.assign({}, params, { callback: cbName })).toString();
+    script.src = API_URL + '?' + qs;
+    script.onerror = () => { cleanup(); reject(new Error('could not load the sheet script')); };
+    document.body.appendChild(script);
+  });
+}
+
+// Both reads and writes go through a <script> tag (JSONP), not fetch() —
+// Apps Script web apps don't reliably send the CORS headers fetch() requires.
+async function apiGet(){
+  return jsonp({ action: 'all' });
+}
+async function apiPost(action, payload){
+  const flat = {};
+  Object.keys(payload || {}).forEach(k => {
+    const v = payload[k];
+    flat[k] = Array.isArray(v) ? v.join(',') : v;
+  });
+  return jsonp(Object.assign({ action }, flat));
+}
+
+async function loadState(){
+  if(!API_URL){
+    state.roster = DEFAULT_ROSTER;
+    showToast('Not connected to the sheet yet — set API_URL');
+    render();
+    return;
+  }
+  try{
+    const data = await apiGet();
+    state.roster = (data.roster && data.roster.length) ? data.roster.map(normalizeWine) : DEFAULT_ROSTER;
+    state.entries = (data.entries || []).map(normalizeEntry);
+    if(data.catalog && data.catalog.length){ FULL_CATALOG = data.catalog.map(normalizeWine); }
+  }catch(e){
+    showToast('Could not reach the sheet: ' + e.message);
+    state.roster = DEFAULT_ROSTER;
+  }
+  render();
+}
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(()=> t.classList.remove('show'), 1800);
+}
+
+function fmtDate(d){
+  const dt = new Date(d);
+  return dt.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+}
+function daysSince(d){
+  return Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+}
+function wineLabel(w){
+  return `${w.producer} ${w.year !== 'NV' ? w.year+' ' : ''}${w.wine}`;
+}
+function keyOf(w){
+  return (w.producer + '|' + w.wine).toLowerCase();
+}
+function findWine(id){
+  return state.roster.find(r => r.id === id) || FULL_CATALOG.find(r => r.id === id);
+}
+function catColor(cat){
+  return (CATEGORY_META[cat] || CATEGORY_META.red).color;
+}
+function activeEntries(){
+  return state.entries.filter(e => e.type === 'CV' && !e.closedAt);
+}
+
+async function switchTab(tab){
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.getElementById('view-log').style.display = tab === 'log' ? '' : 'none';
+  document.getElementById('view-active').style.display = tab === 'active' ? '' : 'none';
+  document.getElementById('view-history').style.display = tab === 'history' ? '' : 'none';
+  if((tab === 'active' || tab === 'history') && API_URL){
+    await loadState(); // pick up anything logged from the other phone
+  } else {
+    render();
+  }
+}
+
+function render(){
+  renderCatFilter();
+  renderWineList();
+  renderActive();
+  renderHistory();
+  const n = activeEntries().length;
+  document.getElementById('active-count-tab').textContent = n ? `(${n})` : '';
+}
+
+function renderCatFilter(){
+  const wrap = document.getElementById('cat-filter');
+  const pills = ['all', ...CATEGORY_ORDER];
+  wrap.innerHTML = pills.map(c => {
+    const isActive = activeCategory === c;
+    const label = c === 'all' ? 'All' : CATEGORY_META[c].label;
+    const dot = c === 'all' ? '' : `<span class="cat-dot" style="background:${CATEGORY_META[c].color}"></span>`;
+    return `<span class="cat-pill ${isActive?'active':''}" data-cat="${c}">${dot}${label}</span>`;
+  }).join('');
+}
+
+function wineRowHTML(w, extra){
+  const isOpen = openRowId === w.id;
+  const who = selectedWho[w.id];
+  const color = catColor(w.category);
+  return `
+    <div class="wine-row ${isOpen ? 'open' : ''} ${extra ? 'extra' : ''}" data-id="${w.id}" style="border-left-color:${color}">
+      <div class="head" data-toggle="${w.id}">
+        <div>
+          <div class="name">${wineLabel(w)}${w.reserve ? '<span class="reserve-tag">Reserve</span>' : ''}${extra ? '<span class="notbtg-tag">Not on BTG list</span>' : ''}</div>
+          <div class="meta">${w.producer} · ${(CATEGORY_META[w.category]||{}).label || ''}</div>
+        </div>
+        ${manageMode && !extra
+          ? `<span class="close-btn" data-remove="${w.id}">Remove</span>`
+          : `<span class="chev">›</span>`}
+      </div>
+      <div class="panel">
+        <div class="panel-inner">
+          ${extra ? `<p class="hint" style="margin-top:-2px">Logging this adds it to your BTG list automatically.</p>` : ''}
+          <div class="who-row">
+            ${STAFF.map(s => `<span class="chip ${who===s?'selected':''}" data-who="${w.id}" data-name="${s}">${s}</span>`).join('')}
+          </div>
+          <div class="action-row">
+            <button class="btn btn-cv" data-log="${w.id}" data-type="CV" ${!who ? 'disabled' : ''}>Coravin'd</button>
+            <button class="btn btn-open" data-log="${w.id}" data-type="O" ${!who ? 'disabled' : ''}>Opened straight</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderWineList(){
+  const list = document.getElementById('wine-list');
+  const q = (document.getElementById('search').value || '').toLowerCase().trim();
+
+  const btgWines = state.roster.filter(w => {
+    const matchesQ = !q || wineLabel(w).toLowerCase().includes(q);
+    const matchesCat = activeCategory === 'all' || w.category === activeCategory;
+    return matchesQ && matchesCat;
+  });
+
+  let html = '';
+  if(!btgWines.length && !q){
+    html = `<div class="empty">No wine matches this filter.</div>`;
+  } else {
+    html += btgWines.map(w => wineRowHTML(w, false)).join('');
+  }
+
+  // Search reaches the full wine list too, but only once there's a query —
+  // the BTG list stays the default view.
+  if(q){
+    const rosterKeys = new Set(state.roster.map(keyOf));
+    const catalogMatches = FULL_CATALOG.filter(w => {
+      if(rosterKeys.has(keyOf(w))) return false;
+      const matchesQ = wineLabel(w).toLowerCase().includes(q);
+      const matchesCat = activeCategory === 'all' || w.category === activeCategory;
+      return matchesQ && matchesCat;
+    }).slice(0, 15);
+
+    if(catalogMatches.length){
+      html += `<div class="section-title" style="margin-top:14px">Full wine list</div>`;
+      html += catalogMatches.map(w => wineRowHTML(w, true)).join('');
+    }
+    if(!btgWines.length && !catalogMatches.length){
+      html = `<div class="empty">No wine matches “${q}”.</div>`;
+    }
+  }
+
+  list.innerHTML = html;
+}
+
+function renderActive(){
+  const wrap = document.getElementById('active-list');
+  const entries = activeEntries().sort((a,b)=> new Date(a.at) - new Date(b.at));
+  document.getElementById('active-count').textContent = entries.length ? `(${entries.length})` : '';
+  if(!entries.length){
+    wrap.innerHTML = `<div class="empty">Nothing Coravin'd right now. Log one from the "Log a bottle" tab.</div>`;
+    return;
+  }
+  wrap.innerHTML = entries.map(e => {
+    const w = state.roster.find(r => r.id === e.wineId);
+    const d = daysSince(e.at);
+    const dot = d < 4 ? 'green' : d < 10 ? 'amber' : 'red';
+    const color = w ? catColor(w.category) : 'var(--cat-red)';
+    return `
+      <div class="active-card" style="border-left-color:${color}">
+        <span class="dot ${dot}"></span>
+        <div class="info">
+          <div class="name">${w ? wineLabel(w) : e.wineName}</div>
+          <div class="sub">Coravin'd ${fmtDate(e.at)} · ${d} day${d===1?'':'s'} open · ${e.who} · ${e.reconciled ? 'counted in stock' : 'not yet reconciled'}</div>
+        </div>
+        <span class="close-btn" data-close="${e.id}">Close out</span>
+      </div>`;
+  }).join('');
+}
+
+function renderHistory(){
+  const wrap = document.getElementById('history-list');
+  const entries = [...state.entries].sort((a,b)=> new Date(b.at) - new Date(a.at)).slice(0, 60);
+  if(!entries.length){
+    wrap.innerHTML = `<div class="empty">No activity logged yet.</div>`;
+    return;
+  }
+  wrap.innerHTML = entries.map(e => {
+    const w = state.roster.find(r => r.id === e.wineId);
+    const label = w ? wineLabel(w) : e.wineName;
+    let badge = 'badge o', text = 'Opened';
+    if(e.type === 'CV' && !e.closedAt){ badge = 'badge cv'; text = "Coravin'd"; }
+    else if(e.type === 'CV' && e.closedAt){ badge = 'badge closed'; text = `CV → finished`; }
+    return `
+      <div class="log-entry">
+        <div class="left">
+          <div class="name">${label}</div>
+          <div class="sub">${fmtDate(e.at)} · ${e.who}${e.closedAt ? ` → closed ${fmtDate(e.closedAt)}` : ''}${e.reconciled ? ' · reconciled' : ''}</div>
+        </div>
+        <span class="${badge}">${text}</span>
+      </div>`;
+  }).join('');
+}
+
+function unreconciledEntries(){
+  return state.entries.filter(e => !e.reconciled);
+}
+
+function buildReconcileText(){
+  const pending = unreconciledEntries();
+  const lines = ['Gravesend — Reconciliation', new Date().toLocaleString('en-US'), ''];
+  lines.push('SUBTRACT FROM BOTTLE COUNT (since last reconciliation)');
+  if(!pending.length){
+    lines.push('  (nothing new to reconcile)');
+  } else {
+    const tally = {};
+    pending.forEach(e => {
+      const w = state.roster.find(r => r.id === e.wineId);
+      const label = w ? wineLabel(w) : e.wineName;
+      if(!tally[label]) tally[label] = {cv:0, o:0};
+      if(e.type === 'CV') tally[label].cv++; else tally[label].o++;
+    });
+    Object.keys(tally).sort().forEach(label => {
+      const t = tally[label];
+      const total = t.cv + t.o;
+      const parts = [];
+      if(t.cv) parts.push(`${t.cv} CV`);
+      if(t.o) parts.push(`${t.o} Opened`);
+      lines.push(`  ${label}\t-${total}\t(${parts.join(', ')})`);
+    });
+  }
+  lines.push('');
+  lines.push('STILL OPEN ON THE SHELF (Coravin, not yet finished)');
+  const open = activeEntries();
+  if(!open.length) lines.push('  (none)');
+  open.forEach(e => {
+    const w = state.roster.find(r => r.id === e.wineId);
+    lines.push(`  ${w ? wineLabel(w) : e.wineName}\topened ${fmtDate(e.at)}\t${e.who}`);
+  });
+  return {text: lines.join('\n'), pending};
+}
+
+document.addEventListener('click', async (ev) => {
+  const tab = ev.target.closest('.tab');
+  if(tab){ switchTab(tab.dataset.tab); return; }
+
+  const pill = ev.target.closest('.cat-pill');
+  if(pill){ activeCategory = pill.dataset.cat; renderCatFilter(); renderWineList(); return; }
+
+  const toggle = ev.target.closest('[data-toggle]');
+  if(toggle){
+    const id = toggle.dataset.toggle;
+    openRowId = openRowId === id ? null : id;
+    renderWineList();
+    return;
+  }
+
+  const who = ev.target.closest('[data-who]');
+  if(who){
+    selectedWho[who.dataset.who] = who.dataset.name;
+    renderWineList();
+    return;
+  }
+
+  const logBtn = ev.target.closest('[data-log]');
+  if(logBtn && !logBtn.disabled){
+    const wineId = logBtn.dataset.log;
+    const type = logBtn.dataset.type;
+    const w = findWine(wineId);
+    const promoted = !state.roster.find(r => r.id === wineId);
+    openRowId = null;
+    try{
+      await apiPost('addEntry', { wineId, wineName: w ? wineLabel(w) : 'Unknown wine', type, who: selectedWho[wineId] });
+      showToast(type === 'CV' ? "Logged — Coravin'd" + (promoted ? ' · added to BTG list' : '') : 'Logged — opened' + (promoted ? ' · added to BTG list' : ''));
+      document.getElementById('search').value = '';
+      await loadState();
+    }catch(e){ showToast('Could not save — check connection'); }
+    return;
+  }
+
+  const closeBtn = ev.target.closest('[data-close]');
+  if(closeBtn){
+    try{
+      await apiPost('closeEntry', { entryId: closeBtn.dataset.close });
+      showToast('Marked as fully opened');
+      await loadState();
+    }catch(e){ showToast('Could not save — check connection'); }
+    return;
+  }
+
+  const removeBtn = ev.target.closest('[data-remove]');
+  if(removeBtn){
+    try{
+      await apiPost('removeRosterWine', { id: removeBtn.dataset.remove });
+      await loadState();
+    }catch(e){ showToast('Could not remove — check connection'); }
+    return;
+  }
+
+  if(ev.target.id === 'manage-btn'){
+    manageMode = !manageMode;
+    ev.target.textContent = manageMode ? 'Done managing' : 'Manage list';
+    ev.target.classList.toggle('primary', !manageMode);
+    renderWineList();
+    return;
+  }
+
+  if(ev.target.id === 'copy-btn'){
+    const {text, pending} = buildReconcileText();
+    try{
+      await navigator.clipboard.writeText(text);
+      if(pending.length){
+        await apiPost('markReconciled', { entryIds: pending.map(e => e.id) });
+        showToast(`Copied — ${pending.length} entr${pending.length===1?'y':'ies'} marked reconciled`);
+        await loadState();
+      } else {
+        showToast('Copied — nothing new since last reconciliation');
+      }
+    }catch(e){
+      showToast('Could not copy or save — check connection');
+    }
+    return;
+  }
+
+  if(ev.target.id === 'add-wine-trigger'){
+    const holder = document.getElementById('add-form-holder');
+    if(holder.innerHTML){ holder.innerHTML = ''; return; }
+    holder.innerHTML = `
+      <div class="add-form">
+        <div class="row">
+          <input type="text" id="new-producer" placeholder="Producer" />
+          <input type="text" id="new-year" placeholder="Year / NV" />
+        </div>
+        <input type="text" id="new-wine" placeholder="Wine name" />
+        <select id="new-category">
+          <option value="white">White</option>
+          <option value="rose">Rosé</option>
+          <option value="bubbles">Bubbles</option>
+          <option value="chilled">Chilled Red</option>
+          <option value="red" selected>Red</option>
+          <option value="dessert">Dessert</option>
+        </select>
+        <button class="btn btn-open" id="save-new-wine">Add to list</button>
+      </div>`;
+    return;
+  }
+
+  if(ev.target.id === 'save-new-wine'){
+    const producer = document.getElementById('new-producer').value.trim();
+    const year = document.getElementById('new-year').value.trim() || 'NV';
+    const wine = document.getElementById('new-wine').value.trim();
+    const category = document.getElementById('new-category').value;
+    if(!producer || !wine){ showToast('Add a producer and wine name'); return; }
+    try{
+      await apiPost('addRosterWine', { producer, year, wine, category });
+      document.getElementById('add-form-holder').innerHTML = '';
+      document.getElementById('search').value = '';
+      await loadState();
+      showToast('Added to the list');
+    }catch(e){ showToast('Could not add — check connection'); }
+    return;
+  }
+});
+
+document.getElementById('search').addEventListener('input', renderWineList);
+
+loadState();
+</script>
+</body>
+</html>
