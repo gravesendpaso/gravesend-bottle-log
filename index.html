@@ -523,8 +523,8 @@ async function switchTab(tab){
   document.getElementById('view-log').style.display = tab === 'log' ? '' : 'none';
   document.getElementById('view-active').style.display = tab === 'active' ? '' : 'none';
   document.getElementById('view-history').style.display = tab === 'history' ? '' : 'none';
-  if((tab === 'active' || tab === 'history') && API_URL){
-    await loadState(); // pick up anything logged from the other phone
+  if(API_URL){
+    await loadState(); // pick up anything logged from another phone or typed into the sheet
   } else {
     render();
   }
@@ -830,6 +830,16 @@ document.addEventListener('click', async (ev) => {
 });
 
 document.getElementById('search').addEventListener('input', renderWineList);
+
+// A house phone often just sits open on one tab for a whole shift. Refresh
+// whenever it wakes back up (screen unlock, switching back from another app)
+// and lightly poll in the background so it never goes too stale.
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible' && API_URL){ loadState(); }
+});
+if(API_URL){
+  setInterval(() => { if(document.visibilityState === 'visible'){ loadState(); } }, 45000);
+}
 
 loadState();
 </script>
