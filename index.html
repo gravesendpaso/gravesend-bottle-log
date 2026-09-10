@@ -433,6 +433,7 @@ function normalizeEntry(e){
 }
 
 let jsonpCounter = 0;
+function wait(ms){ return new Promise(r => setTimeout(r, ms)); }
 function jsonp(params){
   return new Promise((resolve, reject) => {
     const cbName = 'gbl_cb_' + (jsonpCounter++) + '_' + Date.now();
@@ -472,16 +473,15 @@ async function loadState(){
     const data = await apiGet();
     if(data.error){
       showToast('Sheet said: ' + data.error);
-      state.roster = DEFAULT_ROSTER;
-      render();
-      return;
+    } else {
+      state.roster = (data.roster && data.roster.length) ? data.roster.map(normalizeWine) : DEFAULT_ROSTER;
+      state.entries = (data.entries || []).map(normalizeEntry);
+      if(data.catalog && data.catalog.length){ FULL_CATALOG = data.catalog.map(normalizeWine); }
     }
-    state.roster = (data.roster && data.roster.length) ? data.roster.map(normalizeWine) : DEFAULT_ROSTER;
-    state.entries = (data.entries || []).map(normalizeEntry);
-    if(data.catalog && data.catalog.length){ FULL_CATALOG = data.catalog.map(normalizeWine); }
   }catch(e){
     showToast('Could not reach the sheet: ' + e.message);
-    state.roster = DEFAULT_ROSTER;
+    // Keep whatever we last loaded successfully rather than blanking the
+    // screen to the generic fallback list on a transient hiccup.
   }
   render();
 }
@@ -747,6 +747,7 @@ document.addEventListener('click', async (ev) => {
       await loadState();
     }catch(e){
       showToast('Slow response — checking if it saved...');
+      await wait(3000);
       await loadState();
     }
     return;
@@ -760,6 +761,7 @@ document.addEventListener('click', async (ev) => {
       await loadState();
     }catch(e){
       showToast('Slow response — checking if it saved...');
+      await wait(3000);
       await loadState();
     }
     return;
@@ -772,6 +774,7 @@ document.addEventListener('click', async (ev) => {
       await loadState();
     }catch(e){
       showToast('Slow response — checking if it saved...');
+      await wait(3000);
       await loadState();
     }
     return;
@@ -840,6 +843,7 @@ document.addEventListener('click', async (ev) => {
       showToast('Added to the list');
     }catch(e){
       showToast('Slow response — checking if it saved...');
+      await wait(3000);
       await loadState();
     }
     return;
