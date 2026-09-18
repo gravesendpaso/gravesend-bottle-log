@@ -554,7 +554,7 @@ async function switchTab(tab){
   document.getElementById('view-log').style.display = tab === 'log' ? '' : 'none';
   document.getElementById('view-active').style.display = tab === 'active' ? '' : 'none';
   document.getElementById('view-history').style.display = tab === 'history' ? '' : 'none';
-  if(API_URL){
+  if((tab === 'active' || tab === 'history') && API_URL){
     await loadState(); // pick up anything logged from another phone or typed into the sheet
   } else {
     render();
@@ -859,7 +859,7 @@ document.addEventListener('click', async (ev) => {
     const promoted = !state.roster.find(r => r.id === wineId);
     openRowId = null;
     try{
-      const data = await apiPost('addEntry', { wineId, wineName: w ? wineLabel(w) : 'Unknown wine', type, who: selectedWho[wineId] });
+      const data = await apiPost('addEntry', { wineId, wineName: w ? wineLabel(w) : 'Unknown wine', type, who: selectedWho[wineId], needsPromote: promoted });
       const ok = applyPayload(data);
       if(ok){
         showToast(type === 'CV' ? "Logged — Coravin'd" + (promoted ? ' · added to BTG list' : '') : 'Logged — opened' + (promoted ? ' · added to BTG list' : ''));
