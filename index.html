@@ -493,6 +493,7 @@ async function loadState(){
     render();
     return;
   }
+  render(); // show what we already have first — never leave the screen blank while a slow fetch is in flight
   try{
     const data = await apiGet();
     applyPayload(data);
