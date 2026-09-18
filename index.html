@@ -95,6 +95,11 @@
   .cat-pill.active{ background: var(--surface-2); border-color: var(--text-dim); color: var(--text); }
   .cat-dot{ width: 9px; height: 9px; border-radius: 50%; flex-shrink:0; }
 
+  .sort-toggle{
+    display:inline-block; margin: 2px 0 10px; padding: 6px 0;
+    font-size: 12.5px; font-weight: 600; color: var(--gold); cursor: pointer;
+  }
+
   .wine-row{
     background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
     margin-bottom: 8px; overflow: hidden; border-left-width: 4px; border-left-style: solid;
@@ -234,6 +239,8 @@
       <section>
         <div class="section-title">Now pouring — Coravin or opened <span class="count" id="active-count"></span></div>
         <p class="hint">Pulled from bottle stock, pouring by the glass. Close one out once it's fully finished.</p>
+        <div class="cat-filter" id="active-cat-filter"></div>
+        <span class="sort-toggle" id="active-sort-toggle"></span>
         <div id="active-list"></div>
       </section>
     </div>
@@ -419,8 +426,13 @@ let state = { roster: DEFAULT_ROSTER, entries: [] };
 let openRowId = null;
 let selectedWho = {};
 let manageMode = false;
+let busy = false;
 let activeTab = 'log';
 let activeCategory = 'all';
+let activeFilterCat = 'all';
+const SORT_LABELS = { urgent: 'Sort: needs attention first', longest: 'Sort: longest open first', az: 'Sort: A–Z' };
+const SORT_CYCLE = ['urgent', 'longest', 'az'];
+let activeSort = SORT_CYCLE[0];
 
 function normalizeWine(w){
   return Object.assign({}, w, { reserve: w.reserve === true || w.reserve === 'TRUE' || w.reserve === 'true' });
@@ -438,7 +450,7 @@ function jsonp(params){
   return new Promise((resolve, reject) => {
     const cbName = 'gbl_cb_' + (jsonpCounter++) + '_' + Date.now();
     const script = document.createElement('script');
-    const timeout = setTimeout(() => { cleanup(); reject(new Error('timed out — check the API_URL and your connection')); }, 20000);
+    const timeout = setTimeout(() => { cleanup(); reject(new Error('timed out — check the API_URL and your connection')); }, 30000);
     function cleanup(){ clearTimeout(timeout); delete window[cbName]; script.remove(); }
     window[cbName] = (data) => { cleanup(); resolve(data); };
     const qs = new URLSearchParams(Object.assign({}, params, { callback: cbName })).toString();
@@ -462,6 +474,17 @@ async function apiPost(action, payload){
   return jsonp(Object.assign({ action, key: APP_KEY }, flat));
 }
 
+function applyPayload(data){
+  if(data.error){
+    showToast('Sheet said: ' + data.error);
+    return false;
+  }
+  state.roster = (data.roster && data.roster.length) ? data.roster.map(normalizeWine) : DEFAULT_ROSTER;
+  state.entries = (data.entries || []).map(normalizeEntry);
+  if(data.catalog && data.catalog.length){ FULL_CATALOG = data.catalog.map(normalizeWine); }
+  return true;
+}
+
 async function loadState(){
   if(!API_URL){
     state.roster = DEFAULT_ROSTER;
@@ -471,13 +494,7 @@ async function loadState(){
   }
   try{
     const data = await apiGet();
-    if(data.error){
-      showToast('Sheet said: ' + data.error);
-    } else {
-      state.roster = (data.roster && data.roster.length) ? data.roster.map(normalizeWine) : DEFAULT_ROSTER;
-      state.entries = (data.entries || []).map(normalizeEntry);
-      if(data.catalog && data.catalog.length){ FULL_CATALOG = data.catalog.map(normalizeWine); }
-    }
+    applyPayload(data);
   }catch(e){
     showToast('Could not reach the sheet: ' + e.message);
     // Keep whatever we last loaded successfully rather than blanking the
@@ -515,6 +532,18 @@ function catColor(cat){
 }
 function activeEntries(){
   return state.entries.filter(e => !e.closedAt);
+}
+// Straight-opened bottles have no preservation, so they need a much tighter
+// freshness window than Coravin'd ones — tune this if it doesn't match how
+// fast you actually see quality drop.
+function freshnessDot(e){
+  const d = daysSince(e.at);
+  return e.type === 'CV'
+    ? (d < 4 ? 'green' : d < 10 ? 'amber' : 'red')
+    : (d < 1 ? 'green' : d < 2 ? 'amber' : 'red');
+}
+function findAnyWine(id){
+  return state.roster.find(r => r.id === id) || FULL_CATALOG.find(r => r.id === id);
 }
 
 async function switchTab(tab){
@@ -620,23 +649,59 @@ function renderWineList(){
   list.innerHTML = html;
 }
 
+function renderActiveCatFilter(){
+  const wrap = document.getElementById('active-cat-filter');
+  const pills = ['all', ...CATEGORY_ORDER];
+  wrap.innerHTML = pills.map(c => {
+    const isActive = activeFilterCat === c;
+    const label = c === 'all' ? 'All' : CATEGORY_META[c].label;
+    const dot = c === 'all' ? '' : `<span class="cat-dot" style="background:${CATEGORY_META[c].color}"></span>`;
+    return `<span class="cat-pill ${isActive?'active':''}" data-activecat="${c}">${dot}${label}</span>`;
+  }).join('');
+}
+
+const URGENCY_RANK = { red: 2, amber: 1, green: 0 };
+function sortActiveEntries(entries){
+  const arr = [...entries];
+  if(activeSort === 'urgent'){
+    arr.sort((a,b) => {
+      const r = URGENCY_RANK[freshnessDot(b)] - URGENCY_RANK[freshnessDot(a)];
+      return r !== 0 ? r : new Date(a.at) - new Date(b.at);
+    });
+  } else if(activeSort === 'longest'){
+    arr.sort((a,b) => new Date(a.at) - new Date(b.at));
+  } else if(activeSort === 'az'){
+    arr.sort((a,b) => {
+      const la = (findAnyWine(a.wineId) ? wineLabel(findAnyWine(a.wineId)) : a.wineName);
+      const lb = (findAnyWine(b.wineId) ? wineLabel(findAnyWine(b.wineId)) : b.wineName);
+      return la.localeCompare(lb);
+    });
+  }
+  return arr;
+}
+
 function renderActive(){
+  renderActiveCatFilter();
+  const sortEl = document.getElementById('active-sort-toggle');
+  if(sortEl) sortEl.textContent = SORT_LABELS[activeSort];
+
   const wrap = document.getElementById('active-list');
-  const entries = activeEntries().sort((a,b)=> new Date(a.at) - new Date(b.at));
+  let entries = activeEntries().filter(e => {
+    if(activeFilterCat === 'all') return true;
+    const w = findAnyWine(e.wineId);
+    return w && w.category === activeFilterCat;
+  });
+  entries = sortActiveEntries(entries);
+
   document.getElementById('active-count').textContent = entries.length ? `(${entries.length})` : '';
   if(!entries.length){
-    wrap.innerHTML = `<div class="empty">Nothing open right now. Log one from the "Log a bottle" tab.</div>`;
+    wrap.innerHTML = `<div class="empty">${activeFilterCat === 'all' ? 'Nothing open right now. Log one from the "Log a bottle" tab.' : 'Nothing open right now in this category.'}</div>`;
     return;
   }
   wrap.innerHTML = entries.map(e => {
-    const w = state.roster.find(r => r.id === e.wineId);
+    const w = findAnyWine(e.wineId);
     const d = daysSince(e.at);
-    // Straight-opened bottles have no preservation, so they need a much
-    // tighter freshness window than Coravin'd ones — tune this if it
-    // doesn't match how fast you actually see quality drop.
-    const dot = e.type === 'CV'
-      ? (d < 4 ? 'green' : d < 10 ? 'amber' : 'red')
-      : (d < 1 ? 'green' : d < 2 ? 'amber' : 'red');
+    const dot = freshnessDot(e);
     const color = w ? catColor(w.category) : 'var(--cat-red)';
     const method = e.type === 'CV' ? "Coravin'd" : 'Opened';
     return `
@@ -716,7 +781,23 @@ document.addEventListener('click', async (ev) => {
   if(tab){ switchTab(tab.dataset.tab); return; }
 
   const pill = ev.target.closest('.cat-pill');
-  if(pill){ activeCategory = pill.dataset.cat; renderCatFilter(); renderWineList(); return; }
+  if(pill){
+    if(pill.dataset.activecat !== undefined){
+      activeFilterCat = pill.dataset.activecat;
+      renderActive();
+    } else {
+      activeCategory = pill.dataset.cat;
+      renderCatFilter();
+      renderWineList();
+    }
+    return;
+  }
+
+  if(ev.target.id === 'active-sort-toggle'){
+    activeSort = SORT_CYCLE[(SORT_CYCLE.indexOf(activeSort) + 1) % SORT_CYCLE.length];
+    renderActive();
+    return;
+  }
 
   const toggle = ev.target.closest('[data-toggle]');
   if(toggle){
@@ -735,47 +816,67 @@ document.addEventListener('click', async (ev) => {
 
   const logBtn = ev.target.closest('[data-log]');
   if(logBtn && !logBtn.disabled){
+    if(busy){ showToast('Still working on the last one — one sec'); return; }
+    busy = true;
+    showToast('Saving…');
     const wineId = logBtn.dataset.log;
     const type = logBtn.dataset.type;
     const w = findWine(wineId);
     const promoted = !state.roster.find(r => r.id === wineId);
     openRowId = null;
     try{
-      await apiPost('addEntry', { wineId, wineName: w ? wineLabel(w) : 'Unknown wine', type, who: selectedWho[wineId] });
-      showToast(type === 'CV' ? "Logged — Coravin'd" + (promoted ? ' · added to BTG list' : '') : 'Logged — opened' + (promoted ? ' · added to BTG list' : ''));
-      document.getElementById('search').value = '';
-      await loadState();
+      const data = await apiPost('addEntry', { wineId, wineName: w ? wineLabel(w) : 'Unknown wine', type, who: selectedWho[wineId] });
+      const ok = applyPayload(data);
+      if(ok){
+        showToast(type === 'CV' ? "Logged — Coravin'd" + (promoted ? ' · added to BTG list' : '') : 'Logged — opened' + (promoted ? ' · added to BTG list' : ''));
+        document.getElementById('search').value = '';
+      }
+      render();
     }catch(e){
       showToast('Slow response — checking if it saved...');
       await wait(3000);
       await loadState();
+    }finally{
+      busy = false;
     }
     return;
   }
 
   const closeBtn = ev.target.closest('[data-close]');
   if(closeBtn){
+    if(busy){ showToast('Still working on the last one — one sec'); return; }
+    busy = true;
+    showToast('Saving…');
     try{
-      await apiPost('closeEntry', { entryId: closeBtn.dataset.close });
-      showToast('Marked as fully opened');
-      await loadState();
+      const data = await apiPost('closeEntry', { entryId: closeBtn.dataset.close });
+      const ok = applyPayload(data);
+      if(ok) showToast('Marked as fully opened');
+      render();
     }catch(e){
       showToast('Slow response — checking if it saved...');
       await wait(3000);
       await loadState();
+    }finally{
+      busy = false;
     }
     return;
   }
 
   const removeBtn = ev.target.closest('[data-remove]');
   if(removeBtn){
+    if(busy){ showToast('Still working on the last one — one sec'); return; }
+    busy = true;
+    showToast('Saving…');
     try{
-      await apiPost('removeRosterWine', { id: removeBtn.dataset.remove });
-      await loadState();
+      const data = await apiPost('removeRosterWine', { id: removeBtn.dataset.remove });
+      applyPayload(data);
+      render();
     }catch(e){
       showToast('Slow response — checking if it saved...');
       await wait(3000);
       await loadState();
+    }finally{
+      busy = false;
     }
     return;
   }
@@ -793,9 +894,10 @@ document.addEventListener('click', async (ev) => {
     try{
       await navigator.clipboard.writeText(text);
       if(pending.length){
-        await apiPost('markReconciled', { entryIds: pending.map(e => e.id) });
+        const data = await apiPost('markReconciled', { entryIds: pending.map(e => e.id) });
+        applyPayload(data);
         showToast(`Copied — ${pending.length} entr${pending.length===1?'y':'ies'} marked reconciled`);
-        await loadState();
+        render();
       } else {
         showToast('Copied — nothing new since last reconciliation');
       }
@@ -835,16 +937,22 @@ document.addEventListener('click', async (ev) => {
     const wine = document.getElementById('new-wine').value.trim();
     const category = document.getElementById('new-category').value;
     if(!producer || !wine){ showToast('Add a producer and wine name'); return; }
+    if(busy){ showToast('Still working on the last one — one sec'); return; }
+    busy = true;
+    showToast('Saving…');
     try{
-      await apiPost('addRosterWine', { producer, year, wine, category });
+      const data = await apiPost('addRosterWine', { producer, year, wine, category });
+      const ok = applyPayload(data);
       document.getElementById('add-form-holder').innerHTML = '';
       document.getElementById('search').value = '';
-      await loadState();
-      showToast('Added to the list');
+      render();
+      if(ok) showToast('Added to the list');
     }catch(e){
       showToast('Slow response — checking if it saved...');
       await wait(3000);
       await loadState();
+    }finally{
+      busy = false;
     }
     return;
   }
@@ -859,7 +967,7 @@ document.addEventListener('visibilitychange', () => {
   if(document.visibilityState === 'visible' && API_URL){ loadState(); }
 });
 if(API_URL){
-  setInterval(() => { if(document.visibilityState === 'visible'){ loadState(); } }, 90000);
+  setInterval(() => { if(document.visibilityState === 'visible'){ loadState(); } }, 120000);
 }
 
 loadState();
