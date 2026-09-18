@@ -248,6 +248,7 @@
     <div id="view-history" class="view" style="display:none">
       <section>
         <div class="section-title">Recent activity</div>
+        <span class="sort-toggle" id="export-csv-btn">Export CSV</span>
         <div id="history-list"></div>
       </section>
     </div>
@@ -742,6 +743,38 @@ function unreconciledEntries(){
   return state.entries.filter(e => !e.reconciled);
 }
 
+function csvEscape(v){
+  const s = String(v == null ? '' : v);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function exportEntriesCSV(){
+  const rows = [['Wine','Producer','Year','Category','Method','Who','Opened At','Closed At','Reconciled']];
+  [...state.entries].sort((a,b) => new Date(a.at) - new Date(b.at)).forEach(e => {
+    const w = findAnyWine(e.wineId);
+    rows.push([
+      w ? w.wine : e.wineName,
+      w ? w.producer : '',
+      w ? w.year : '',
+      w ? ((CATEGORY_META[w.category]||{}).label || w.category) : '',
+      e.type === 'CV' ? "Coravin'd" : 'Opened',
+      e.who,
+      e.at,
+      e.closedAt || '',
+      e.reconciled ? 'Yes' : 'No'
+    ]);
+  });
+  const csv = rows.map(r => r.map(csvEscape).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'gravesend-bottle-log-' + new Date().toISOString().slice(0, 10) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function buildReconcileText(){
   const pending = unreconciledEntries();
   const lines = ['Gravesend — Reconciliation', new Date().toLocaleString('en-US'), ''];
@@ -889,11 +922,20 @@ document.addEventListener('click', async (ev) => {
     return;
   }
 
+  if(ev.target.id === 'export-csv-btn'){
+    exportEntriesCSV();
+    showToast('CSV downloaded');
+    return;
+  }
+
   if(ev.target.id === 'copy-btn'){
+    if(busy){ showToast('Still working on the last one — one sec'); return; }
+    busy = true;
     const {text, pending} = buildReconcileText();
     try{
       await navigator.clipboard.writeText(text);
       if(pending.length){
+        showToast('Copied — updating the sheet…');
         const data = await apiPost('markReconciled', { entryIds: pending.map(e => e.id) });
         applyPayload(data);
         showToast(`Copied — ${pending.length} entr${pending.length===1?'y':'ies'} marked reconciled`);
@@ -902,8 +944,11 @@ document.addEventListener('click', async (ev) => {
         showToast('Copied — nothing new since last reconciliation');
       }
     }catch(e){
-      showToast('Could not copy — check connection');
+      showToast('Slow response — checking if it saved...');
+      await wait(3000);
       await loadState();
+    }finally{
+      busy = false;
     }
     return;
   }
