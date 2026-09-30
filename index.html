@@ -141,12 +141,23 @@
   .btn{
     flex:1; padding: 12px 10px; border-radius: 10px; border: none; font-weight: 700;
     font-size: 14px; cursor: pointer; font-family: inherit;
+    background: var(--surface-2); color: var(--text); border: 1px solid var(--line);
   }
   .btn:disabled{ opacity: .4; cursor: not-allowed; }
   .btn-cv{ background: var(--burgundy); color: #f3e4e9; }
   .btn-cv:not(:disabled):active{ background: var(--burgundy-bright); }
   .btn-open{ background: var(--gold); color: var(--bg); }
   .btn-open:not(:disabled):active{ background: var(--gold-bright); }
+  .btn-danger{ background: transparent; color: #d16b6b; border: 1px solid #d16b6b; }
+  .btn-danger:active{ background: rgba(209,107,107,.12); }
+
+  .panel select, .panel .reserve-check{
+    display:block; width:100%; margin: 4px 0 8px; padding: 10px 12px;
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px;
+    color: var(--text); font-size: 14px; font-family: inherit;
+  }
+  .reserve-check{ display:flex; align-items:center; gap: 8px; }
+  .reserve-check input{ width: 16px; height: 16px; }
 
   .add-row{
     display:flex; align-items:center; justify-content:center; gap: 6px;
@@ -179,6 +190,8 @@
   .badge.cv{ background: rgba(178,58,78,.32); color: #f3b8c3; }
   .badge.o{ background: rgba(224,163,57,.26); color: var(--gold-bright); }
   .badge.closed{ background: var(--surface-2); color: var(--text-dim); }
+  .right-group{ display:flex; flex-direction:column; align-items:flex-end; gap: 5px; flex-shrink:0; }
+  .right-group .close-btn{ font-size: 10.5px; padding: 3px 8px; }
 
   .empty{ color: var(--text-dim); font-size: 13.5px; text-align:center; padding: 24px 10px; }
 
@@ -232,6 +245,8 @@
         <div id="wine-list"></div>
         <div class="add-row" id="add-wine-trigger">+ Add a wine not on this list</div>
         <div id="add-form-holder"></div>
+        <div class="add-row" id="add-catalog-trigger" style="display:none">+ Add new wine to inventory (not on BTG list)</div>
+        <div id="add-catalog-form-holder"></div>
       </section>
     </div>
 
@@ -256,7 +271,7 @@
 
   <div class="footer-bar">
     <button id="copy-btn">Reconcile &amp; copy</button>
-    <button id="manage-btn" class="primary">Manage list</button>
+    <button id="manage-btn" class="primary">Manage wines</button>
   </div>
 </div>
 
@@ -592,20 +607,36 @@ function wineRowHTML(w, extra){
           <div class="name">${wineLabel(w)}${w.reserve ? '<span class="reserve-tag">Reserve</span>' : ''}${extra ? '<span class="notbtg-tag">Not on BTG list</span>' : ''}</div>
           <div class="meta">${w.producer} · ${(CATEGORY_META[w.category]||{}).label || ''}</div>
         </div>
-        ${manageMode && !extra
-          ? `<span class="close-btn" data-remove="${w.id}">Remove</span>`
+        ${manageMode
+          ? `<span class="close-btn" data-edit-wine="${w.id}">Edit</span>`
           : `<span class="chev">›</span>`}
       </div>
       <div class="panel">
         <div class="panel-inner">
-          ${extra ? `<p class="hint" style="margin-top:-2px">Logging this adds it to your BTG list automatically.</p>` : ''}
-          <div class="who-row">
-            ${STAFF.map(s => `<span class="chip ${who===s?'selected':''}" data-who="${w.id}" data-name="${s}">${s}</span>`).join('')}
-          </div>
-          <div class="action-row">
-            <button class="btn btn-cv" data-log="${w.id}" data-type="CV" ${!who ? 'disabled' : ''}>Coravin'd</button>
-            <button class="btn btn-open" data-log="${w.id}" data-type="O" ${!who ? 'disabled' : ''}>Opened straight</button>
-          </div>
+          ${manageMode ? `
+            <select id="edit-cat-${w.id}">
+              ${CATEGORY_ORDER.map(c => `<option value="${c}" ${w.category===c?'selected':''}>${CATEGORY_META[c].label}</option>`).join('')}
+            </select>
+            <label class="reserve-check">
+              <input type="checkbox" id="edit-reserve-${w.id}" ${w.reserve ? 'checked' : ''} /> Reserve pour
+            </label>
+            <div class="action-row">
+              <button class="btn btn-open" data-save-wine="${w.id}">Save changes</button>
+            </div>
+            <div class="action-row">
+              ${!extra ? `<button class="btn" data-remove="${w.id}">Take off BTG list</button>` : ''}
+              <button class="btn btn-danger" data-delete-wine="${w.id}">Delete from inventory</button>
+            </div>
+          ` : `
+            ${extra ? `<p class="hint" style="margin-top:-2px">Logging this adds it to your BTG list automatically.</p>` : ''}
+            <div class="who-row">
+              ${STAFF.map(s => `<span class="chip ${who===s?'selected':''}" data-who="${w.id}" data-name="${s}">${s}</span>`).join('')}
+            </div>
+            <div class="action-row">
+              <button class="btn btn-cv" data-log="${w.id}" data-type="CV" ${!who ? 'disabled' : ''}>Coravin'd</button>
+              <button class="btn btn-open" data-log="${w.id}" data-type="O" ${!who ? 'disabled' : ''}>Opened straight</button>
+            </div>
+          `}
         </div>
       </div>
     </div>`;
@@ -649,6 +680,9 @@ function renderWineList(){
   }
 
   list.innerHTML = html;
+
+  document.getElementById('add-wine-trigger').style.display = manageMode ? 'none' : '';
+  document.getElementById('add-catalog-trigger').style.display = manageMode ? '' : 'none';
 }
 
 function renderActiveCatFilter(){
@@ -726,7 +760,7 @@ function renderHistory(){
     return;
   }
   wrap.innerHTML = entries.map(e => {
-    const w = state.roster.find(r => r.id === e.wineId);
+    const w = findAnyWine(e.wineId);
     const label = w ? wineLabel(w) : e.wineName;
     const text = e.type === 'CV' ? 'CV → finished' : 'Opened → finished';
     return `
@@ -735,7 +769,10 @@ function renderHistory(){
           <div class="name">${label}</div>
           <div class="sub">${fmtDate(e.at)} · ${e.who} → closed ${fmtDate(e.closedAt)}${e.reconciled ? ' · reconciled' : ''}</div>
         </div>
-        <span class="badge closed">${text}</span>
+        <div class="right-group">
+          <span class="badge closed">${text}</span>
+          <span class="close-btn" data-delete-entry="${e.id}">Delete</span>
+        </div>
       </div>`;
   }).join('');
 }
@@ -915,9 +952,73 @@ document.addEventListener('click', async (ev) => {
     return;
   }
 
+  const deleteEntryBtn = ev.target.closest('[data-delete-entry]');
+  if(deleteEntryBtn){
+    if(busy){ showToast('Still working on the last one — one sec'); return; }
+    busy = true;
+    showToast('Deleting…');
+    try{
+      const data = await apiPost('deleteEntry', { entryId: deleteEntryBtn.dataset.deleteEntry });
+      applyPayload(data);
+      render();
+      showToast('Entry deleted');
+    }catch(e){
+      showToast('Slow response — checking if it saved...');
+      await wait(3000);
+      await loadState();
+    }finally{
+      busy = false;
+    }
+    return;
+  }
+
+  const saveWineBtn = ev.target.closest('[data-save-wine]');
+  if(saveWineBtn){
+    if(busy){ showToast('Still working on the last one — one sec'); return; }
+    const id = saveWineBtn.dataset.saveWine;
+    const category = document.getElementById('edit-cat-' + id).value;
+    const reserve = document.getElementById('edit-reserve-' + id).checked;
+    busy = true;
+    showToast('Saving…');
+    try{
+      const data = await apiPost('updateWine', { id, category, reserve });
+      const ok = applyPayload(data);
+      render();
+      if(ok) showToast('Saved');
+    }catch(e){
+      showToast('Slow response — checking if it saved...');
+      await wait(3000);
+      await loadState();
+    }finally{
+      busy = false;
+    }
+    return;
+  }
+
+  const deleteWineBtn = ev.target.closest('[data-delete-wine]');
+  if(deleteWineBtn){
+    if(busy){ showToast('Still working on the last one — one sec'); return; }
+    busy = true;
+    showToast('Deleting…');
+    try{
+      const data = await apiPost('deleteWine', { id: deleteWineBtn.dataset.deleteWine });
+      applyPayload(data);
+      openRowId = null;
+      render();
+      showToast('Deleted from inventory');
+    }catch(e){
+      showToast('Slow response — checking if it saved...');
+      await wait(3000);
+      await loadState();
+    }finally{
+      busy = false;
+    }
+    return;
+  }
+
   if(ev.target.id === 'manage-btn'){
     manageMode = !manageMode;
-    ev.target.textContent = manageMode ? 'Done managing' : 'Manage list';
+    ev.target.textContent = manageMode ? 'Done managing' : 'Manage wines';
     ev.target.classList.toggle('primary', !manageMode);
     renderWineList();
     return;
@@ -974,6 +1075,54 @@ document.addEventListener('click', async (ev) => {
         </select>
         <button class="btn btn-open" id="save-new-wine">Add to list</button>
       </div>`;
+    return;
+  }
+
+  if(ev.target.id === 'add-catalog-trigger'){
+    const holder = document.getElementById('add-catalog-form-holder');
+    if(holder.innerHTML){ holder.innerHTML = ''; return; }
+    holder.innerHTML = `
+      <div class="add-form">
+        <div class="row">
+          <input type="text" id="newcat-producer" placeholder="Producer" />
+          <input type="text" id="newcat-year" placeholder="Year / NV" />
+        </div>
+        <input type="text" id="newcat-wine" placeholder="Wine name" />
+        <select id="newcat-category">
+          ${CATEGORY_ORDER.map(c => `<option value="${c}" ${c==='red'?'selected':''}>${CATEGORY_META[c].label}</option>`).join('')}
+        </select>
+        <label class="reserve-check">
+          <input type="checkbox" id="newcat-reserve" /> Reserve pour
+        </label>
+        <button class="btn btn-open" id="save-new-catalog-wine">Add to inventory</button>
+      </div>`;
+    return;
+  }
+
+  if(ev.target.id === 'save-new-catalog-wine'){
+    const producer = document.getElementById('newcat-producer').value.trim();
+    const year = document.getElementById('newcat-year').value.trim() || 'NV';
+    const wine = document.getElementById('newcat-wine').value.trim();
+    const category = document.getElementById('newcat-category').value;
+    const reserve = document.getElementById('newcat-reserve').checked;
+    if(!producer || !wine){ showToast('Add a producer and wine name'); return; }
+    if(busy){ showToast('Still working on the last one — one sec'); return; }
+    busy = true;
+    showToast('Saving…');
+    try{
+      const data = await apiPost('addCatalogWine', { producer, year, wine, category, reserve });
+      const ok = applyPayload(data);
+      document.getElementById('add-catalog-form-holder').innerHTML = '';
+      document.getElementById('search').value = '';
+      render();
+      if(ok) showToast('Added to inventory — search for it to log or edit');
+    }catch(e){
+      showToast('Slow response — checking if it saved...');
+      await wait(3000);
+      await loadState();
+    }finally{
+      busy = false;
+    }
     return;
   }
 
